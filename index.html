@@ -160,20 +160,48 @@
 
         var invalidFields = [];
 
-        var requiredSelectors = [
-          "input[required]",
-          "select[required]",
-          "textarea[required]",
-          "input[aria-required='true']",
-          "select[aria-required='true']",
-          "textarea[aria-required='true']",
-        ];
-
-        var requiredInputs = stepEl.querySelectorAll(
-          requiredSelectors.join(",")
+        // 1) HubSpot often marks required fields on the wrapper, not the input
+        var requiredWrappers = stepEl.querySelectorAll(
+          ".hs-form-field.hs-form-required, .hs-form-field .hs-form-required"
         );
 
-        requiredInputs.forEach(function (input) {
+        requiredWrappers.forEach(function (wrapper) {
+          // If we matched an inner .hs-form-required span, go back up to the field wrapper
+          if (!wrapper.classList.contains("hs-form-field")) {
+            wrapper = wrapper.closest(".hs-form-field") || wrapper;
+          }
+
+          var input =
+            wrapper.querySelector("input, select, textarea") ||
+            wrapper.querySelector(".hs-input");
+
+          if (!input) return;
+
+          var isValid = true;
+
+          if (input.type === "checkbox" || input.type === "radio") {
+            var group = wrapper.querySelectorAll(
+              'input[name="' + input.name + '"]:checked'
+            );
+            isValid = group.length > 0;
+          } else {
+            var value = input.value;
+            isValid = !!value && value.toString().trim() !== "";
+          }
+
+          if (!isValid) {
+            invalidFields.push(input);
+            markFieldError(input);
+          }
+        });
+
+        // 2) Also catch any inputs that actually DO have required/aria-required set
+        var attrRequiredInputs = stepEl.querySelectorAll(
+          "input[required], select[required], textarea[required], " +
+            "input[aria-required='true'], select[aria-required='true'], textarea[aria-required='true']"
+        );
+
+        attrRequiredInputs.forEach(function (input) {
           var isValid = true;
 
           if (input.type === "checkbox" || input.type === "radio") {
@@ -182,7 +210,8 @@
             );
             isValid = group.length > 0;
           } else {
-            isValid = !!input.value && input.value.trim() !== "";
+            var value = input.value;
+            isValid = !!value && value.toString().trim() !== "";
           }
 
           if (!isValid) {
