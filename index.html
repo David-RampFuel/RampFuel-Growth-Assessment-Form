@@ -1,15 +1,270 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>RampFuel | Growth Assessment Form</title>
+  <meta charset="UTF-8" />
+  <title>RampFuel Growth Assessment Form</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      background: #f5f5f7;
+      margin: 0;
+      padding: 40px 16px;
+    }
+
+    .rf-container {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 32px 24px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+    }
+
+    .rf-header {
+      margin-bottom: 16px;
+    }
+
+    .rf-header h1 {
+      margin: 0 0 8px;
+      font-size: 1.6rem;
+    }
+
+    .rf-header p {
+      margin: 0;
+      color: #64748b;
+      font-size: 0.95rem;
+    }
+
+    /* error styling */
+    .rf-field-error .hs-input,
+    .rf-field-error input,
+    .rf-field-error select,
+    .rf-field-error textarea {
+      border-color: #e11d48 !important;
+      box-shadow: 0 0 0 1px rgba(225, 29, 72, 0.1);
+    }
+
+    .rf-error-message {
+      color: #e11d48;
+      font-size: 0.8rem;
+      margin-top: 4px;
+    }
+
+    .rf-step-error-banner {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #b91c1c;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    .rf-step-error-banner.visible {
+      display: block;
+    }
+  </style>
 </head>
 <body>
-  <script charset="utf-8" type="text/javascript" src="https://js.hsforms.net/forms/embed/v2.js"></script>
+  <div class="rf-container">
+    <div class="rf-header">
+      <h1>RampFuel Growth Assessment</h1>
+      <p>
+        Please complete all required questions on each step before moving
+        forward.
+      </p>
+    </div>
+
+    <div id="rf-step-error" class="rf-step-error-banner">
+      Please complete all required fields on this step before continuing.
+    </div>
+
+    <!-- HubSpot form will be injected here -->
+    <div id="rf-form-root"></div>
+  </div>
+
+  <!-- HubSpot forms library -->
+  <script
+    charset="utf-8"
+    type="text/javascript"
+    src="https://js.hsforms.net/forms/embed/v2.js"
+  ></script>
+
   <script>
+    // Helper: turn HubSpot's $form into a plain DOM element
+    function normalizeFormElement($form) {
+      if (!$form) return null;
+      // jQuery-style object
+      if ($form.get && typeof $form.get === "function") {
+        return $form.get(0);
+      }
+      // plain element
+      if ($form instanceof HTMLElement) return $form;
+      // array-like
+      if ($form[0] && $form[0] instanceof HTMLElement) return $form[0];
+      return document.querySelector("form");
+    }
+
+    function setupNextBlocking(formEl) {
+      if (!formEl) return;
+
+      var errorBanner = document.getElementById("rf-step-error");
+
+      function clearErrors(stepEl) {
+        if (!stepEl) return;
+        var errored = stepEl.querySelectorAll(".rf-field-error");
+        errored.forEach(function (wrap) {
+          wrap.classList.remove("rf-field-error");
+          var msg = wrap.querySelector(".rf-error-message");
+          if (msg) msg.remove();
+        });
+        if (errorBanner) {
+          errorBanner.classList.remove("visible");
+        }
+      }
+
+      function markFieldError(input) {
+        var wrapper =
+          input.closest(".hs-form-field") || input.parentElement || input;
+        wrapper.classList.add("rf-field-error");
+
+        // only add one custom message per field
+        if (!wrapper.querySelector(".rf-error-message")) {
+          var span = document.createElement("div");
+          span.className = "rf-error-message";
+          span.textContent = "This field is required.";
+          wrapper.appendChild(span);
+        }
+      }
+
+      // Find the current "page"/step container
+      function getCurrentStepContainer() {
+        // new multi-step forms use data attributes; fall back to visible page
+        var step =
+          formEl.querySelector("[data-form-page-current='true']") ||
+          formEl.querySelector(
+            ".hs-form-page[style*='display: block'], .hs-form-page:not([style*='display: none'])"
+          );
+
+        return step || formEl;
+      }
+
+      // Validate all required fields in the current step
+      function validateCurrentStep() {
+        var stepEl = getCurrentStepContainer();
+        clearErrors(stepEl);
+
+        var invalidFields = [];
+
+        var requiredSelectors = [
+          "input[required]",
+          "select[required]",
+          "textarea[required]",
+          "input[aria-required='true']",
+          "select[aria-required='true']",
+          "textarea[aria-required='true']",
+        ];
+
+        var requiredInputs = stepEl.querySelectorAll(
+          requiredSelectors.join(",")
+        );
+
+        requiredInputs.forEach(function (input) {
+          var isValid = true;
+
+          if (input.type === "checkbox" || input.type === "radio") {
+            var group = stepEl.querySelectorAll(
+              'input[name="' + input.name + '"]:checked'
+            );
+            isValid = group.length > 0;
+          } else {
+            isValid = !!input.value && input.value.trim() !== "";
+          }
+
+          if (!isValid) {
+            invalidFields.push(input);
+            markFieldError(input);
+          }
+        });
+
+        if (invalidFields.length > 0 && errorBanner) {
+          errorBanner.classList.add("visible");
+        }
+
+        return invalidFields;
+      }
+
+      function attachNextListeners() {
+        // Look for any buttons that look like "Next"
+        var buttons = formEl.querySelectorAll("button, input[type='button']");
+
+        buttons.forEach(function (btn) {
+          var label =
+            (btn.innerText || btn.value || "").trim().toLowerCase();
+
+          if (
+            label === "next" ||
+            label.startsWith("next ") ||
+            label === "continue" ||
+            label.startsWith("continue ")
+          ) {
+            // capture phase so we run before HubSpot's own handlers
+            btn.addEventListener(
+              "click",
+              function (e) {
+                var invalid = validateCurrentStep();
+                if (invalid.length > 0) {
+                  e.preventDefault();
+                  e.stopImmediatePropagation();
+
+                  var first = invalid[0];
+                  // focus + scroll into view
+                  try {
+                    first.focus({ preventScroll: true });
+                  } catch (err) {
+                    try {
+                      first.focus();
+                    } catch (e2) {}
+                  }
+                  first.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                  });
+                  return false;
+                }
+              },
+              true
+            );
+          }
+        });
+      }
+
+      attachNextListeners();
+
+      // In case HubSpot dynamically re-renders steps/buttons, watch for changes
+      var observer = new MutationObserver(function () {
+        attachNextListeners();
+      });
+
+      observer.observe(formEl, {
+        childList: true,
+        subtree: true,
+      });
+    }
+
+    // Create the HubSpot form and hook into onFormReady
     hbspt.forms.create({
       portalId: "242714090",
-      formId: "3a22e97e-7db8-4dd4-ab93-8ed70c797dd9"
+      formId: "3a22e97e-7db8-4dd4-ab93-8ed70c797dd9",
+      target: "#rf-form-root",
+      onFormReady: function ($form) {
+        var formEl = normalizeFormElement($form);
+        setupNextBlocking(formEl);
+      },
     });
   </script>
 </body>
