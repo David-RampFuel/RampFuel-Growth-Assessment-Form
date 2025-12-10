@@ -114,9 +114,9 @@
 
       var errorBanner = document.getElementById("rf-step-error");
 
-      function clearErrors(stepEl) {
-        if (!stepEl) return;
-        var errored = stepEl.querySelectorAll(".rf-field-error");
+      function clearErrors(scopeEl) {
+        var root = scopeEl || formEl;
+        var errored = root.querySelectorAll(".rf-field-error");
         errored.forEach(function (wrap) {
           wrap.classList.remove("rf-field-error");
           var msg = wrap.querySelector(".rf-error-message");
@@ -143,7 +143,7 @@
 
       // Find the current "page"/step container
       function getCurrentStepContainer() {
-        // new multi-step forms use data attributes; fall back to visible page
+        // New multi-step forms often use data attributes
         var step =
           formEl.querySelector("[data-form-page-current='true']") ||
           formEl.querySelector(
@@ -156,20 +156,24 @@
       // Validate all required fields in the current step
       function validateCurrentStep() {
         var stepEl = getCurrentStepContainer();
+        if (!stepEl) stepEl = formEl;
+
         clearErrors(stepEl);
 
         var invalidFields = [];
 
-        // 1) HubSpot often marks required fields on the wrapper, not the input
-        var requiredWrappers = stepEl.querySelectorAll(
+        // 1) HubSpot usually marks required fields via classes on the wrapper
+        var allRequiredWrappers = formEl.querySelectorAll(
           ".hs-form-field.hs-form-required, .hs-form-field .hs-form-required"
         );
 
-        requiredWrappers.forEach(function (wrapper) {
-          // If we matched an inner .hs-form-required span, go back up to the field wrapper
+        allRequiredWrappers.forEach(function (wrapper) {
+          // If we matched the inner span, climb up to the field wrapper
           if (!wrapper.classList.contains("hs-form-field")) {
             wrapper = wrapper.closest(".hs-form-field") || wrapper;
           }
+
+          if (!stepEl.contains(wrapper)) return; // only validate fields in current step
 
           var input =
             wrapper.querySelector("input, select, textarea") ||
@@ -195,13 +199,15 @@
           }
         });
 
-        // 2) Also catch any inputs that actually DO have required/aria-required set
-        var attrRequiredInputs = stepEl.querySelectorAll(
+        // 2) Also catch any actual required/aria-required attributes, scoped to current step
+        var attrRequiredInputs = formEl.querySelectorAll(
           "input[required], select[required], textarea[required], " +
             "input[aria-required='true'], select[aria-required='true'], textarea[aria-required='true']"
         );
 
         attrRequiredInputs.forEach(function (input) {
+          if (!stepEl.contains(input)) return;
+
           var isValid = true;
 
           if (input.type === "checkbox" || input.type === "radio") {
@@ -228,20 +234,38 @@
       }
 
       function attachNextListeners() {
-        // Look for any buttons that look like "Next"
-        var buttons = formEl.querySelectorAll("button, input[type='button']");
+        // Look for anything that might act as "Next"
+        var buttons = formEl.querySelectorAll(
+          "button, input[type='button'], input[type='submit'], [data-form-page-next]"
+        );
 
         buttons.forEach(function (btn) {
-          var label =
-            (btn.innerText || btn.value || "").trim().toLowerCase();
+          // If HubSpot marks it explicitly as a page-next, treat it as Next
+          var isExplicitNext =
+            btn.hasAttribute("data-form-page-next") ||
+            btn.getAttribute("data-form-page-action") === "next";
 
-          if (
+          var label = (
+            btn.innerText ||
+            btn.value ||
+            btn.getAttribute("aria-label") ||
+            ""
+          )
+            .trim()
+            .toLowerCase();
+
+          // support English + common Spanish labels
+          var looksLikeNext =
             label === "next" ||
             label.startsWith("next ") ||
             label === "continue" ||
-            label.startsWith("continue ")
-          ) {
-            // capture phase so we run before HubSpot's own handlers
+            label.startsWith("continue ") ||
+            label === "siguiente" ||
+            label.startsWith("siguiente ") ||
+            label === "continuar" ||
+            label.startsWith("continuar ");
+
+          if (isExplicitNext || looksLikeNext) {
             btn.addEventListener(
               "click",
               function (e) {
@@ -251,7 +275,6 @@
                   e.stopImmediatePropagation();
 
                   var first = invalid[0];
-                  // focus + scroll into view
                   try {
                     first.focus({ preventScroll: true });
                   } catch (err) {
@@ -266,7 +289,7 @@
                   return false;
                 }
               },
-              true
+              true // capture so we run before HubSpot's own logic
             );
           }
         });
