@@ -43,10 +43,8 @@
       font-size: 0.85rem;
       color: #475569;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 6px;
     }
 
     .rf-progress-text-main {
@@ -54,6 +52,7 @@
     }
 
     .rf-pill {
+      align-self: flex-start;
       padding: 4px 10px;
       border-radius: 999px;
       background: #eef2ff;
@@ -70,12 +69,11 @@
 
     .rf-progress-meter {
       position: relative;
-      flex: 1 1 100%;
+      width: 100%;
       height: 6px;
       border-radius: 999px;
       background: #e5e7eb;
       overflow: hidden;
-      margin-top: 6px;
     }
 
     .rf-progress-meter-fill {
@@ -92,8 +90,7 @@
     <div class="rf-header">
       <h1>RampFuel Growth Assessment</h1>
       <p>
-        Please complete each section. Your progress below updates as you answer
-        questions.
+        Please complete the questions below. Your progress updates as you answer.
       </p>
     </div>
 
@@ -101,9 +98,7 @@
       <div class="rf-progress-text-main" id="rf-progress-main">
         Loading progress…
       </div>
-      <div class="rf-pill" id="rf-progress-pill">
-        –
-      </div>
+      <div class="rf-pill" id="rf-progress-pill">–</div>
       <div class="rf-progress-meter">
         <div class="rf-progress-meter-fill" id="rf-progress-fill"></div>
       </div>
@@ -121,44 +116,25 @@
   ></script>
 
   <script>
-    // Helper: turn HubSpot's $form into a plain DOM element
+    // Normalize HubSpot's $form into a plain DOM element
     function normalizeFormElement($form) {
       if (!$form) return null;
-      // jQuery-style object
-      if ($form.get && typeof $form.get === "function") {
-        return $form.get(0);
-      }
-      // plain element
+      if ($form.get && typeof $form.get === "function") return $form.get(0);
       if ($form instanceof HTMLElement) return $form;
-      // array-like
       if ($form[0] && $form[0] instanceof HTMLElement) return $form[0];
       return document.querySelector("form");
     }
 
-    function setupSectionProgress(formEl) {
+    function setupWholeFormProgress(formEl) {
       if (!formEl) return;
 
       var progressMain = document.getElementById("rf-progress-main");
       var progressPill = document.getElementById("rf-progress-pill");
       var progressFill = document.getElementById("rf-progress-fill");
 
-      // Find step/section containers
-      function getStepContainers() {
-        var pages = Array.from(
-          formEl.querySelectorAll("[data-form-page-role='page'], .hs-form-page")
-        );
-        if (!pages.length) {
-          return [formEl]; // treat whole form as one section
-        }
-        return pages;
-      }
-
-      var stepContainers = getStepContainers();
-
-      // For each step, find question wrappers (hs-form-field) that actually contain a visible input/select/textarea
-      function getQuestionsInStep(stepEl) {
-        var wrappers = Array.from(stepEl.querySelectorAll(".hs-form-field"));
-
+      // Find all "question" wrappers in the form
+      function getQuestionWrappers() {
+        var wrappers = Array.from(formEl.querySelectorAll(".hs-form-field"));
         return wrappers.filter(function (wrapper) {
           var inputs = Array.from(
             wrapper.querySelectorAll("input, select, textarea")
@@ -172,40 +148,14 @@
             ) {
               return false;
             }
-            // ignore if not actually visible
             var style = window.getComputedStyle(input);
             return style.display !== "none" && style.visibility !== "hidden";
           });
-
           return inputs.length > 0;
         });
       }
 
-      var stepQuestions = stepContainers.map(function (stepEl) {
-        return getQuestionsInStep(stepEl);
-      });
-
-      function getCurrentStepIndex() {
-        // New multi-step forms often tag the current page
-        var explicitCurrent = formEl.querySelector(
-          "[data-form-page-current='true']"
-        );
-        if (explicitCurrent) {
-          var idx = stepContainers.indexOf(explicitCurrent);
-          if (idx !== -1) return idx;
-        }
-
-        // Fallback: visible step
-        for (var i = 0; i < stepContainers.length; i++) {
-          var el = stepContainers[i];
-          var style = window.getComputedStyle(el);
-          if (style.display !== "none" && style.visibility !== "hidden") {
-            return i;
-          }
-        }
-
-        return 0;
-      }
+      var questionWrappers = getQuestionWrappers();
 
       function isQuestionAnswered(wrapper) {
         var inputs = Array.from(
@@ -226,20 +176,17 @@
 
         if (!inputs.length) return false;
 
-        // Checkbox/radio: consider answered if any checked
         var hasChoice = inputs.some(function (input) {
           var type = (input.type || "").toLowerCase();
           return type === "checkbox" || type === "radio";
         });
 
         if (hasChoice) {
-          var anyChecked = inputs.some(function (input) {
+          return inputs.some(function (input) {
             return input.checked;
           });
-          return anyChecked;
         }
 
-        // Other inputs: answered if value not empty
         return inputs.some(function (input) {
           var val = input.value;
           return val != null && val.toString().trim() !== "";
@@ -247,52 +194,36 @@
       }
 
       function updateProgress() {
-        var totalSteps = stepContainers.length;
-        var currentStepIndex = getCurrentStepIndex();
-        var currentStepNumber = currentStepIndex + 1;
+        questionWrappers = getQuestionWrappers();
 
-        var questions = stepQuestions[currentStepIndex] || [];
-        var totalQuestions = questions.length;
+        var totalQuestions = questionWrappers.length;
+        var answeredQuestions = questionWrappers.filter(isQuestionAnswered)
+          .length;
 
-        var answeredQuestions = questions.filter(isQuestionAnswered).length;
-
-        // Build text
-        if (totalSteps > 1) {
-          progressMain.textContent =
-            "Step " +
-            currentStepNumber +
-            " of " +
-            totalSteps +
-            " · Answered " +
-            answeredQuestions +
-            " / " +
-            totalQuestions +
-            " questions in this section";
-        } else {
-          progressMain.textContent =
-            "Answered " +
-            answeredQuestions +
-            " / " +
-            totalQuestions +
-            " questions";
-        }
-
-        // Pill + bar color
         if (totalQuestions === 0) {
-          progressPill.textContent = "No questions detected in this section";
+          progressMain.textContent =
+            "Progress will appear once the questions finish loading.";
+          progressPill.textContent = "No questions detected yet";
           progressPill.classList.remove("rf-pill--complete");
           if (progressFill) progressFill.style.width = "0%";
           return;
         }
 
+        progressMain.textContent =
+          "Answered " +
+          answeredQuestions +
+          " / " +
+          totalQuestions +
+          " questions";
+
         var ratio = answeredQuestions / totalQuestions;
         var percent = Math.round(ratio * 100);
 
-        if (answeredQuestions === totalQuestions && totalQuestions > 0) {
-          progressPill.textContent = "Section complete";
+        if (answeredQuestions === totalQuestions) {
+          progressPill.textContent = "All questions completed";
           progressPill.classList.add("rf-pill--complete");
         } else {
-          progressPill.textContent = percent + "% of this section answered";
+          progressPill.textContent = percent + "% of questions answered";
           progressPill.classList.remove("rf-pill--complete");
         }
 
@@ -301,7 +232,7 @@
         }
       }
 
-      // Update on any change / input
+      // Update on typing / changes
       formEl.addEventListener(
         "input",
         function () {
@@ -317,13 +248,8 @@
         true
       );
 
-      // Watch for step changes (Next/Back) or HubSpot re-renders
+      // Watch for HubSpot inserting fields after onFormReady
       var obs = new MutationObserver(function () {
-        // re-detect steps and questions, then update
-        stepContainers = getStepContainers();
-        stepQuestions = stepContainers.map(function (stepEl) {
-          return getQuestionsInStep(stepEl);
-        });
         updateProgress();
       });
 
@@ -343,7 +269,7 @@
       target: "#rf-form-root",
       onFormReady: function ($form) {
         var formEl = normalizeFormElement($form);
-        setupSectionProgress(formEl);
+        setupWholeFormProgress(formEl);
       },
     });
   </script>
