@@ -83,6 +83,36 @@
       background: linear-gradient(90deg, #4f46e5, #22c55e);
       transition: width 0.25s ease-out;
     }
+
+    .rf-section-list {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+
+    .rf-section-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-top: 4px;
+      gap: 8px;
+    }
+
+    .rf-section-name {
+      font-weight: 500;
+      color: #1f2933;
+    }
+
+    .rf-section-count {
+      white-space: nowrap;
+    }
+
+    .rf-section-complete {
+      color: #166534;
+      font-weight: 500;
+    }
   </style>
 </head>
 <body>
@@ -94,6 +124,7 @@
       </p>
     </div>
 
+    <!-- Overall progress -->
     <div class="rf-progress-bar">
       <div class="rf-progress-text-main" id="rf-progress-main">
         Progress will appear once the questions finish loading.
@@ -102,6 +133,11 @@
       <div class="rf-progress-meter">
         <div class="rf-progress-meter-fill" id="rf-progress-fill"></div>
       </div>
+    </div>
+
+    <!-- Per-section progress -->
+    <div class="rf-section-list" id="rf-section-list">
+      <!-- section rows injected via JS -->
     </div>
 
     <!-- HubSpot form will be injected into this container by the developer script -->
@@ -119,16 +155,17 @@
   </div>
 
   <script>
-    // Treat each unique field "name" as a question
-    function setupWholeFormProgress(formEl) {
+    // Group questions by nearest <h2> above them
+    function setupFormProgressWithSections(formEl) {
       if (!formEl) return;
 
       var progressMain = document.getElementById("rf-progress-main");
       var progressPill = document.getElementById("rf-progress-pill");
       var progressFill = document.getElementById("rf-progress-fill");
+      var sectionList = document.getElementById("rf-section-list");
 
-      function getQuestionGroups() {
-        var allInputs = Array.from(
+      function getAllQuestionInputs() {
+        return Array.from(
           formEl.querySelectorAll("input, select, textarea")
         ).filter(function (input) {
           var type = (input.type || "").toLowerCase();
@@ -143,21 +180,64 @@
           var style = window.getComputedStyle(input);
           return style.display !== "none" && style.visibility !== "hidden";
         });
+      }
 
+      function getSectionHeadings() {
+        // Only <h2> — exactly your section titles
+        return Array.from(formEl.querySelectorAll("h2")).filter(function (h) {
+          var txt = (h.innerText || "").trim();
+          if (!txt) return false;
+          var style = window.getComputedStyle(h);
+          return style.display !== "none" && style.visibility !== "hidden";
+        });
+      }
+
+      function findNearestH2Above(el, h2s) {
+        var current = el;
+        while (current && current !== formEl) {
+          var sibling = current.previousElementSibling;
+          while (sibling) {
+            if (h2s.indexOf(sibling) !== -1) return sibling;
+            // also check for nested h2 inside sibling
+            var nested = sibling.querySelector("h2");
+            if (nested && h2s.indexOf(nested) !== -1) return nested;
+            sibling = sibling.previousElementSibling;
+          }
+          current = current.parentElement;
+        }
+        return null;
+      }
+
+      function buildQuestionGroupsBySection() {
+        var inputs = getAllQuestionInputs();
+        var h2s = getSectionHeadings();
         var byName = {};
-        allInputs.forEach(function (input) {
+
+        inputs.forEach(function (input) {
           var name = input.name || input.id;
           if (!name) return;
           if (!byName[name]) {
             byName[name] = {
               name: name,
               inputs: [],
+              sectionTitle: null
             };
           }
           byName[name].inputs.push(input);
         });
 
-        return Object.values(byName);
+        var groups = Object.values(byName);
+
+        // assign section titles
+        groups.forEach(function (group) {
+          var refInput = group.inputs[0];
+          var heading = findNearestH2Above(refInput, h2s);
+          group.sectionTitle = heading
+            ? (heading.innerText || "").trim()
+            : "Other";
+        });
+
+        return groups;
       }
 
       function isGroupAnswered(group) {
@@ -182,7 +262,7 @@
       }
 
       function updateProgress() {
-        var groups = getQuestionGroups();
+        var groups = buildQuestionGroupsBySection();
         var totalQuestions = groups.length;
         var answeredQuestions = groups.filter(isGroupAnswered).length;
 
@@ -192,9 +272,11 @@
           progressPill.textContent = "No questions detected yet";
           progressPill.classList.remove("rf-pill--complete");
           if (progressFill) progressFill.style.width = "0%";
+          if (sectionList) sectionList.innerHTML = "";
           return;
         }
 
+        // overall
         progressMain.textContent =
           "Answered " +
           answeredQuestions +
@@ -216,9 +298,57 @@
         if (progressFill) {
           progressFill.style.width = percent + "%";
         }
+
+        // per-section
+        if (sectionList) {
+          var bySection = {};
+          groups.forEach(function (g) {
+            var title = g.sectionTitle || "Other";
+            if (!bySection[title]) {
+              bySection[title] = { title: title, total: 0, answered: 0 };
+            }
+            bySection[title].total += 1;
+            if (isGroupAnswered(g)) {
+              bySection[title].answered += 1;
+            }
+          });
+
+          var sections = Object.values(bySection);
+
+          // order sections in same order as <h2>s
+          var h2s = getSectionHeadings();
+          sections.sort(function (a, b) {
+            var idxA = h2s.findIndex(function (h) {
+              return (h.innerText || "").trim() === a.title;
+            });
+            var idxB = h2s.findIndex(function (h) {
+              return (h.innerText || "").trim() === b.title;
+            });
+            if (idxA === -1 && idxB === -1) return 0;
+            if (idxA === -1) return 1;
+            if (idxB === -1) return -1;
+            return idxA - idxB;
+          });
+
+          var html = "";
+          sections.forEach(function (s) {
+            var complete = s.answered === s.total && s.total > 0;
+            html +=
+              '<div class="rf-section-row">' +
+              '<div class="rf-section-name">' +
+              s.title +
+              "</div>" +
+              '<div class="rf-section-count' +
+              (complete ? " rf-section-complete" : "") +
+              '">';
+            html += s.answered + " / " + s.total;
+            html += "</div></div>";
+          });
+
+          sectionList.innerHTML = html;
+        }
       }
 
-      // Update on typing / changes
       formEl.addEventListener(
         "input",
         function () {
@@ -234,14 +364,13 @@
         true
       );
 
-      // Watch for HubSpot injecting fields after load
       var obs = new MutationObserver(function () {
         updateProgress();
       });
 
       obs.observe(formEl, {
         childList: true,
-        subtree: true,
+        subtree: true
       });
 
       updateProgress();
@@ -255,7 +384,7 @@
       function tryAttach() {
         var form = container.querySelector("form");
         if (form) {
-          setupWholeFormProgress(form);
+          setupFormProgressWithSections(form);
           return true;
         }
         return false;
@@ -270,7 +399,7 @@
 
         observer.observe(container, {
           childList: true,
-          subtree: true,
+          subtree: true
         });
       }
     });
