@@ -104,27 +104,21 @@
       </div>
     </div>
 
-    <!-- HubSpot form will be injected here -->
-    <div id="rf-form-root"></div>
+    <!-- HubSpot form will be injected into this container by the developer script -->
+    <div id="rf-form-root">
+      <!-- 🔸 Your HubSpot developer embed code -->
+      <script src="https://js-na2.hsforms.net/forms/embed/developer/242714090.js" defer></script>
+      <div
+        id="rf-hs-form-container"
+        class="hs-form-html"
+        data-region="na2"
+        data-form-id="3a22e97e-7db8-4dd4-ab93-8ed70c797dd9"
+        data-portal-id="242714090"
+      ></div>
+    </div>
   </div>
 
-  <!-- HubSpot forms library -->
-  <script
-    charset="utf-8"
-    type="text/javascript"
-    src="https://js.hsforms.net/forms/embed/v2.js"
-  ></script>
-
   <script>
-    // Normalize HubSpot's $form into a plain DOM element
-    function normalizeFormElement($form) {
-      if (!$form) return null;
-      if ($form.get && typeof $form.get === "function") return $form.get(0);
-      if ($form instanceof HTMLElement) return $form;
-      if ($form[0] && $form[0] instanceof HTMLElement) return $form[0];
-      return document.querySelector("form");
-    }
-
     function setupWholeFormProgress(formEl) {
       if (!formEl) return;
 
@@ -132,7 +126,6 @@
       var progressPill = document.getElementById("rf-progress-pill");
       var progressFill = document.getElementById("rf-progress-fill");
 
-      // Find all "question" wrappers in the form
       function getQuestionWrappers() {
         var wrappers = Array.from(formEl.querySelectorAll(".hs-form-field"));
         return wrappers.filter(function (wrapper) {
@@ -154,8 +147,6 @@
           return inputs.length > 0;
         });
       }
-
-      var questionWrappers = getQuestionWrappers();
 
       function isQuestionAnswered(wrapper) {
         var inputs = Array.from(
@@ -194,8 +185,7 @@
       }
 
       function updateProgress() {
-        questionWrappers = getQuestionWrappers();
-
+        var questionWrappers = getQuestionWrappers();
         var totalQuestions = questionWrappers.length;
         var answeredQuestions = questionWrappers.filter(isQuestionAnswered)
           .length;
@@ -232,7 +222,6 @@
         }
       }
 
-      // Update on typing / changes
       formEl.addEventListener(
         "input",
         function () {
@@ -248,7 +237,6 @@
         true
       );
 
-      // Watch for HubSpot inserting fields after onFormReady
       var obs = new MutationObserver(function () {
         updateProgress();
       });
@@ -258,19 +246,35 @@
         subtree: true,
       });
 
-      // Initial run
       updateProgress();
     }
 
-    // Create the HubSpot form and hook into onFormReady
-    hbspt.forms.create({
-      portalId: "242714090",
-      formId: "3a22e97e-7db8-4dd4-ab93-8ed70c797dd9",
-      target: "#rf-form-root",
-      onFormReady: function ($form) {
-        var formEl = normalizeFormElement($form);
-        setupWholeFormProgress(formEl);
-      },
+    // Wait for HubSpot's developer script to inject the form HTML
+    document.addEventListener("DOMContentLoaded", function () {
+      var container = document.getElementById("rf-hs-form-container");
+      if (!container) return;
+
+      function tryAttach() {
+        var form = container.querySelector("form");
+        if (form) {
+          setupWholeFormProgress(form);
+          return true;
+        }
+        return false;
+      }
+
+      if (!tryAttach()) {
+        var observer = new MutationObserver(function () {
+          if (tryAttach()) {
+            observer.disconnect();
+          }
+        });
+
+        observer.observe(container, {
+          childList: true,
+          subtree: true,
+        });
+      }
     });
   </script>
 </body>
