@@ -84,12 +84,52 @@
       transition: width 0.25s ease-out;
     }
 
-    .rf-section-list {
+    /* Section breakdown panel */
+    .rf-section-wrapper {
       margin-top: 10px;
       padding-top: 8px;
       border-top: 1px solid #e5e7eb;
       font-size: 0.8rem;
       color: #64748b;
+    }
+
+    .rf-section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .rf-section-header-title {
+      font-weight: 500;
+      color: #111827;
+    }
+
+    .rf-section-toggle-btn {
+      border: none;
+      outline: none;
+      cursor: pointer;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      background: #f3f4ff;
+      color: #4f46e5;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .rf-section-toggle-btn:hover {
+      background: #e0e3ff;
+    }
+
+    .rf-section-list {
+      margin-top: 4px;
+    }
+
+    .rf-section-list.rf-section-list--hidden {
+      display: none;
     }
 
     .rf-section-row {
@@ -135,9 +175,22 @@
       </div>
     </div>
 
-    <!-- Per-section progress -->
-    <div class="rf-section-list" id="rf-section-list">
-      <!-- section rows injected via JS -->
+    <!-- Per-section progress (collapsible) -->
+    <div class="rf-section-wrapper">
+      <div class="rf-section-header">
+        <div class="rf-section-header-title">Section breakdown</div>
+        <button
+          type="button"
+          id="rf-section-toggle"
+          class="rf-section-toggle-btn"
+          aria-expanded="true"
+        >
+          Hide section breakdown
+        </button>
+      </div>
+      <div class="rf-section-list" id="rf-section-list">
+        <!-- section rows injected via JS -->
+      </div>
     </div>
 
     <!-- HubSpot form will be injected into this container by the developer script -->
@@ -163,6 +216,46 @@
       var progressPill = document.getElementById("rf-progress-pill");
       var progressFill = document.getElementById("rf-progress-fill");
       var sectionList = document.getElementById("rf-section-list");
+      var sectionToggle = document.getElementById("rf-section-toggle");
+
+      // --- Toggle behaviour (show / hide section breakdown) ---
+      (function initToggle() {
+        if (!sectionList || !sectionToggle) return;
+
+        var STORAGE_KEY = "rf_section_breakdown_hidden";
+
+        function applyState(hidden) {
+          if (hidden) {
+            sectionList.classList.add("rf-section-list--hidden");
+            sectionToggle.textContent = "Show section breakdown";
+            sectionToggle.setAttribute("aria-expanded", "false");
+          } else {
+            sectionList.classList.remove("rf-section-list--hidden");
+            sectionToggle.textContent = "Hide section breakdown";
+            sectionToggle.setAttribute("aria-expanded", "true");
+          }
+        }
+
+        // Load initial state from localStorage (optional)
+        var saved = null;
+        try {
+          saved = window.localStorage.getItem(STORAGE_KEY);
+        } catch (e) {}
+        var initiallyHidden = saved === "1";
+        applyState(initiallyHidden);
+
+        sectionToggle.addEventListener("click", function () {
+          var isHidden = sectionList.classList.contains(
+            "rf-section-list--hidden"
+          );
+          var newHidden = !isHidden;
+          applyState(newHidden);
+          try {
+            window.localStorage.setItem(STORAGE_KEY, newHidden ? "1" : "0");
+          } catch (e) {}
+        });
+      })();
+      // --------------------------------------------------------
 
       function getAllQuestionInputs() {
         return Array.from(
@@ -183,7 +276,7 @@
       }
 
       function getSectionHeadings() {
-        // Only <h2> — exactly your section titles
+        // Only <h2> — your section titles
         return Array.from(formEl.querySelectorAll("h2")).filter(function (h) {
           var txt = (h.innerText || "").trim();
           if (!txt) return false;
@@ -198,7 +291,6 @@
           var sibling = current.previousElementSibling;
           while (sibling) {
             if (h2s.indexOf(sibling) !== -1) return sibling;
-            // also check for nested h2 inside sibling
             var nested = sibling.querySelector("h2");
             if (nested && h2s.indexOf(nested) !== -1) return nested;
             sibling = sibling.previousElementSibling;
@@ -228,7 +320,6 @@
 
         var groups = Object.values(byName);
 
-        // assign section titles
         groups.forEach(function (group) {
           var refInput = group.inputs[0];
           var heading = findNearestH2Above(refInput, h2s);
@@ -276,7 +367,7 @@
           return;
         }
 
-        // overall
+        // Overall counts
         progressMain.textContent =
           "Answered " +
           answeredQuestions +
@@ -299,7 +390,7 @@
           progressFill.style.width = percent + "%";
         }
 
-        // per-section
+        // Per-section breakdown
         if (sectionList) {
           var bySection = {};
           groups.forEach(function (g) {
@@ -314,9 +405,8 @@
           });
 
           var sections = Object.values(bySection);
-
-          // order sections in same order as <h2>s
           var h2s = getSectionHeadings();
+
           sections.sort(function (a, b) {
             var idxA = h2s.findIndex(function (h) {
               return (h.innerText || "").trim() === a.title;
@@ -349,6 +439,7 @@
         }
       }
 
+      // Update on typing / changes
       formEl.addEventListener(
         "input",
         function () {
@@ -364,6 +455,7 @@
         true
       );
 
+      // Watch for HubSpot injecting fields
       var obs = new MutationObserver(function () {
         updateProgress();
       });
