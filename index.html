@@ -96,9 +96,9 @@
 
     <div class="rf-progress-bar">
       <div class="rf-progress-text-main" id="rf-progress-main">
-        Loading progress…
+        Progress will appear once the questions finish loading.
       </div>
-      <div class="rf-pill" id="rf-progress-pill">–</div>
+      <div class="rf-pill" id="rf-progress-pill">No questions detected yet</div>
       <div class="rf-progress-meter">
         <div class="rf-progress-meter-fill" id="rf-progress-fill"></div>
       </div>
@@ -106,7 +106,7 @@
 
     <!-- HubSpot form will be injected into this container by the developer script -->
     <div id="rf-form-root">
-      <!-- 🔸 Your HubSpot developer embed code -->
+      <!-- Your HubSpot developer embed code -->
       <script src="https://js-na2.hsforms.net/forms/embed/developer/242714090.js" defer></script>
       <div
         id="rf-hs-form-container"
@@ -119,6 +119,7 @@
   </div>
 
   <script>
+    // Treat each unique field "name" as a question
     function setupWholeFormProgress(formEl) {
       if (!formEl) return;
 
@@ -126,31 +127,9 @@
       var progressPill = document.getElementById("rf-progress-pill");
       var progressFill = document.getElementById("rf-progress-fill");
 
-      function getQuestionWrappers() {
-        var wrappers = Array.from(formEl.querySelectorAll(".hs-form-field"));
-        return wrappers.filter(function (wrapper) {
-          var inputs = Array.from(
-            wrapper.querySelectorAll("input, select, textarea")
-          ).filter(function (input) {
-            var type = (input.type || "").toLowerCase();
-            if (
-              type === "hidden" ||
-              type === "submit" ||
-              type === "button" ||
-              input.disabled
-            ) {
-              return false;
-            }
-            var style = window.getComputedStyle(input);
-            return style.display !== "none" && style.visibility !== "hidden";
-          });
-          return inputs.length > 0;
-        });
-      }
-
-      function isQuestionAnswered(wrapper) {
-        var inputs = Array.from(
-          wrapper.querySelectorAll("input, select, textarea")
+      function getQuestionGroups() {
+        var allInputs = Array.from(
+          formEl.querySelectorAll("input, select, textarea")
         ).filter(function (input) {
           var type = (input.type || "").toLowerCase();
           if (
@@ -165,7 +144,25 @@
           return style.display !== "none" && style.visibility !== "hidden";
         });
 
-        if (!inputs.length) return false;
+        var byName = {};
+        allInputs.forEach(function (input) {
+          var name = input.name || input.id;
+          if (!name) return;
+          if (!byName[name]) {
+            byName[name] = {
+              name: name,
+              inputs: [],
+            };
+          }
+          byName[name].inputs.push(input);
+        });
+
+        return Object.values(byName);
+      }
+
+      function isGroupAnswered(group) {
+        var inputs = group.inputs;
+        if (!inputs || !inputs.length) return false;
 
         var hasChoice = inputs.some(function (input) {
           var type = (input.type || "").toLowerCase();
@@ -185,10 +182,9 @@
       }
 
       function updateProgress() {
-        var questionWrappers = getQuestionWrappers();
-        var totalQuestions = questionWrappers.length;
-        var answeredQuestions = questionWrappers.filter(isQuestionAnswered)
-          .length;
+        var groups = getQuestionGroups();
+        var totalQuestions = groups.length;
+        var answeredQuestions = groups.filter(isGroupAnswered).length;
 
         if (totalQuestions === 0) {
           progressMain.textContent =
@@ -222,6 +218,7 @@
         }
       }
 
+      // Update on typing / changes
       formEl.addEventListener(
         "input",
         function () {
@@ -237,6 +234,7 @@
         true
       );
 
+      // Watch for HubSpot injecting fields after load
       var obs = new MutationObserver(function () {
         updateProgress();
       });
