@@ -19,16 +19,16 @@
       margin: 0 auto;
       background: #ffffff;
       border-radius: 12px;
-      padding: 32px 24px;
+      padding: 32px 24px 28px;
       box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
     }
 
     .rf-header {
-      margin-bottom: 16px;
+      margin-bottom: 10px;
     }
 
     .rf-header h1 {
-      margin: 0 0 8px;
+      margin: 0 0 6px;
       font-size: 1.6rem;
     }
 
@@ -38,34 +38,52 @@
       font-size: 0.95rem;
     }
 
-    /* error styling */
-    .rf-field-error .hs-input,
-    .rf-field-error input,
-    .rf-field-error select,
-    .rf-field-error textarea {
-      border-color: #e11d48 !important;
-      box-shadow: 0 0 0 1px rgba(225, 29, 72, 0.1);
-    }
-
-    .rf-error-message {
-      color: #e11d48;
-      font-size: 0.8rem;
-      margin-top: 4px;
-    }
-
-    .rf-step-error-banner {
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      color: #b91c1c;
-      padding: 8px 12px;
-      border-radius: 8px;
+    .rf-progress-bar {
+      margin: 16px 0 10px;
       font-size: 0.85rem;
-      margin-bottom: 12px;
-      display: none;
+      color: #475569;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
-    .rf-step-error-banner.visible {
-      display: block;
+    .rf-progress-text-main {
+      font-weight: 500;
+    }
+
+    .rf-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #3730a3;
+      font-size: 0.78rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .rf-pill--complete {
+      background: #ecfdf3;
+      color: #166534;
+    }
+
+    .rf-progress-meter {
+      position: relative;
+      flex: 1 1 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .rf-progress-meter-fill {
+      position: absolute;
+      inset: 0;
+      width: 0%;
+      background: linear-gradient(90deg, #4f46e5, #22c55e);
+      transition: width 0.25s ease-out;
     }
   </style>
 </head>
@@ -74,13 +92,21 @@
     <div class="rf-header">
       <h1>RampFuel Growth Assessment</h1>
       <p>
-        Please complete all required questions on each step before moving
-        forward.
+        Please complete each section. Your progress below updates as you answer
+        questions.
       </p>
     </div>
 
-    <div id="rf-step-error" class="rf-step-error-banner">
-      Please complete all required fields on this step before continuing.
+    <div class="rf-progress-bar">
+      <div class="rf-progress-text-main" id="rf-progress-main">
+        Loading progress…
+      </div>
+      <div class="rf-pill" id="rf-progress-pill">
+        –
+      </div>
+      <div class="rf-progress-meter">
+        <div class="rf-progress-meter-fill" id="rf-progress-fill"></div>
+      </div>
     </div>
 
     <!-- HubSpot form will be injected here -->
@@ -109,203 +135,205 @@
       return document.querySelector("form");
     }
 
-    function setupNextBlocking(formEl) {
+    function setupSectionProgress(formEl) {
       if (!formEl) return;
 
-      var errorBanner = document.getElementById("rf-step-error");
+      var progressMain = document.getElementById("rf-progress-main");
+      var progressPill = document.getElementById("rf-progress-pill");
+      var progressFill = document.getElementById("rf-progress-fill");
 
-      function clearErrors(scopeEl) {
-        var root = scopeEl || formEl;
-        var errored = root.querySelectorAll(".rf-field-error");
-        errored.forEach(function (wrap) {
-          wrap.classList.remove("rf-field-error");
-          var msg = wrap.querySelector(".rf-error-message");
-          if (msg) msg.remove();
-        });
-        if (errorBanner) {
-          errorBanner.classList.remove("visible");
-        }
-      }
-
-      function markFieldError(input) {
-        var wrapper =
-          input.closest(".hs-form-field") || input.parentElement || input;
-        wrapper.classList.add("rf-field-error");
-
-        // only add one custom message per field
-        if (!wrapper.querySelector(".rf-error-message")) {
-          var span = document.createElement("div");
-          span.className = "rf-error-message";
-          span.textContent = "This field is required.";
-          wrapper.appendChild(span);
-        }
-      }
-
-      // Find the current "page"/step container
-      function getCurrentStepContainer() {
-        // New multi-step forms often use data attributes
-        var step =
-          formEl.querySelector("[data-form-page-current='true']") ||
-          formEl.querySelector(
-            ".hs-form-page[style*='display: block'], .hs-form-page:not([style*='display: none'])"
-          );
-
-        return step || formEl;
-      }
-
-      // Validate all required fields in the current step
-      function validateCurrentStep() {
-        var stepEl = getCurrentStepContainer();
-        if (!stepEl) stepEl = formEl;
-
-        clearErrors(stepEl);
-
-        var invalidFields = [];
-
-        // 1) HubSpot usually marks required fields via classes on the wrapper
-        var allRequiredWrappers = formEl.querySelectorAll(
-          ".hs-form-field.hs-form-required, .hs-form-field .hs-form-required"
+      // Find step/section containers
+      function getStepContainers() {
+        var pages = Array.from(
+          formEl.querySelectorAll("[data-form-page-role='page'], .hs-form-page")
         );
-
-        allRequiredWrappers.forEach(function (wrapper) {
-          // If we matched the inner span, climb up to the field wrapper
-          if (!wrapper.classList.contains("hs-form-field")) {
-            wrapper = wrapper.closest(".hs-form-field") || wrapper;
-          }
-
-          if (!stepEl.contains(wrapper)) return; // only validate fields in current step
-
-          var input =
-            wrapper.querySelector("input, select, textarea") ||
-            wrapper.querySelector(".hs-input");
-
-          if (!input) return;
-
-          var isValid = true;
-
-          if (input.type === "checkbox" || input.type === "radio") {
-            var group = wrapper.querySelectorAll(
-              'input[name="' + input.name + '"]:checked'
-            );
-            isValid = group.length > 0;
-          } else {
-            var value = input.value;
-            isValid = !!value && value.toString().trim() !== "";
-          }
-
-          if (!isValid) {
-            invalidFields.push(input);
-            markFieldError(input);
-          }
-        });
-
-        // 2) Also catch any actual required/aria-required attributes, scoped to current step
-        var attrRequiredInputs = formEl.querySelectorAll(
-          "input[required], select[required], textarea[required], " +
-            "input[aria-required='true'], select[aria-required='true'], textarea[aria-required='true']"
-        );
-
-        attrRequiredInputs.forEach(function (input) {
-          if (!stepEl.contains(input)) return;
-
-          var isValid = true;
-
-          if (input.type === "checkbox" || input.type === "radio") {
-            var group = stepEl.querySelectorAll(
-              'input[name="' + input.name + '"]:checked'
-            );
-            isValid = group.length > 0;
-          } else {
-            var value = input.value;
-            isValid = !!value && value.toString().trim() !== "";
-          }
-
-          if (!isValid) {
-            invalidFields.push(input);
-            markFieldError(input);
-          }
-        });
-
-        if (invalidFields.length > 0 && errorBanner) {
-          errorBanner.classList.add("visible");
+        if (!pages.length) {
+          return [formEl]; // treat whole form as one section
         }
-
-        return invalidFields;
+        return pages;
       }
 
-      function attachNextListeners() {
-        // Look for anything that might act as "Next"
-        var buttons = formEl.querySelectorAll(
-          "button, input[type='button'], input[type='submit'], [data-form-page-next]"
-        );
+      var stepContainers = getStepContainers();
 
-        buttons.forEach(function (btn) {
-          // If HubSpot marks it explicitly as a page-next, treat it as Next
-          var isExplicitNext =
-            btn.hasAttribute("data-form-page-next") ||
-            btn.getAttribute("data-form-page-action") === "next";
+      // For each step, find question wrappers (hs-form-field) that actually contain a visible input/select/textarea
+      function getQuestionsInStep(stepEl) {
+        var wrappers = Array.from(stepEl.querySelectorAll(".hs-form-field"));
 
-          var label = (
-            btn.innerText ||
-            btn.value ||
-            btn.getAttribute("aria-label") ||
-            ""
-          )
-            .trim()
-            .toLowerCase();
+        return wrappers.filter(function (wrapper) {
+          var inputs = Array.from(
+            wrapper.querySelectorAll("input, select, textarea")
+          ).filter(function (input) {
+            var type = (input.type || "").toLowerCase();
+            if (
+              type === "hidden" ||
+              type === "submit" ||
+              type === "button" ||
+              input.disabled
+            ) {
+              return false;
+            }
+            // ignore if not actually visible
+            var style = window.getComputedStyle(input);
+            return style.display !== "none" && style.visibility !== "hidden";
+          });
 
-          // support English + common Spanish labels
-          var looksLikeNext =
-            label === "next" ||
-            label.startsWith("next ") ||
-            label === "continue" ||
-            label.startsWith("continue ") ||
-            label === "siguiente" ||
-            label.startsWith("siguiente ") ||
-            label === "continuar" ||
-            label.startsWith("continuar ");
-
-          if (isExplicitNext || looksLikeNext) {
-            btn.addEventListener(
-              "click",
-              function (e) {
-                var invalid = validateCurrentStep();
-                if (invalid.length > 0) {
-                  e.preventDefault();
-                  e.stopImmediatePropagation();
-
-                  var first = invalid[0];
-                  try {
-                    first.focus({ preventScroll: true });
-                  } catch (err) {
-                    try {
-                      first.focus();
-                    } catch (e2) {}
-                  }
-                  first.scrollIntoView({
-                    behavior: "smooth",
-                    block: "center",
-                  });
-                  return false;
-                }
-              },
-              true // capture so we run before HubSpot's own logic
-            );
-          }
+          return inputs.length > 0;
         });
       }
 
-      attachNextListeners();
-
-      // In case HubSpot dynamically re-renders steps/buttons, watch for changes
-      var observer = new MutationObserver(function () {
-        attachNextListeners();
+      var stepQuestions = stepContainers.map(function (stepEl) {
+        return getQuestionsInStep(stepEl);
       });
 
-      observer.observe(formEl, {
+      function getCurrentStepIndex() {
+        // New multi-step forms often tag the current page
+        var explicitCurrent = formEl.querySelector(
+          "[data-form-page-current='true']"
+        );
+        if (explicitCurrent) {
+          var idx = stepContainers.indexOf(explicitCurrent);
+          if (idx !== -1) return idx;
+        }
+
+        // Fallback: visible step
+        for (var i = 0; i < stepContainers.length; i++) {
+          var el = stepContainers[i];
+          var style = window.getComputedStyle(el);
+          if (style.display !== "none" && style.visibility !== "hidden") {
+            return i;
+          }
+        }
+
+        return 0;
+      }
+
+      function isQuestionAnswered(wrapper) {
+        var inputs = Array.from(
+          wrapper.querySelectorAll("input, select, textarea")
+        ).filter(function (input) {
+          var type = (input.type || "").toLowerCase();
+          if (
+            type === "hidden" ||
+            type === "submit" ||
+            type === "button" ||
+            input.disabled
+          ) {
+            return false;
+          }
+          var style = window.getComputedStyle(input);
+          return style.display !== "none" && style.visibility !== "hidden";
+        });
+
+        if (!inputs.length) return false;
+
+        // Checkbox/radio: consider answered if any checked
+        var hasChoice = inputs.some(function (input) {
+          var type = (input.type || "").toLowerCase();
+          return type === "checkbox" || type === "radio";
+        });
+
+        if (hasChoice) {
+          var anyChecked = inputs.some(function (input) {
+            return input.checked;
+          });
+          return anyChecked;
+        }
+
+        // Other inputs: answered if value not empty
+        return inputs.some(function (input) {
+          var val = input.value;
+          return val != null && val.toString().trim() !== "";
+        });
+      }
+
+      function updateProgress() {
+        var totalSteps = stepContainers.length;
+        var currentStepIndex = getCurrentStepIndex();
+        var currentStepNumber = currentStepIndex + 1;
+
+        var questions = stepQuestions[currentStepIndex] || [];
+        var totalQuestions = questions.length;
+
+        var answeredQuestions = questions.filter(isQuestionAnswered).length;
+
+        // Build text
+        if (totalSteps > 1) {
+          progressMain.textContent =
+            "Step " +
+            currentStepNumber +
+            " of " +
+            totalSteps +
+            " · Answered " +
+            answeredQuestions +
+            " / " +
+            totalQuestions +
+            " questions in this section";
+        } else {
+          progressMain.textContent =
+            "Answered " +
+            answeredQuestions +
+            " / " +
+            totalQuestions +
+            " questions";
+        }
+
+        // Pill + bar color
+        if (totalQuestions === 0) {
+          progressPill.textContent = "No questions detected in this section";
+          progressPill.classList.remove("rf-pill--complete");
+          if (progressFill) progressFill.style.width = "0%";
+          return;
+        }
+
+        var ratio = answeredQuestions / totalQuestions;
+        var percent = Math.round(ratio * 100);
+
+        if (answeredQuestions === totalQuestions && totalQuestions > 0) {
+          progressPill.textContent = "Section complete";
+          progressPill.classList.add("rf-pill--complete");
+        } else {
+          progressPill.textContent = percent + "% of this section answered";
+          progressPill.classList.remove("rf-pill--complete");
+        }
+
+        if (progressFill) {
+          progressFill.style.width = percent + "%";
+        }
+      }
+
+      // Update on any change / input
+      formEl.addEventListener(
+        "input",
+        function () {
+          updateProgress();
+        },
+        true
+      );
+      formEl.addEventListener(
+        "change",
+        function () {
+          updateProgress();
+        },
+        true
+      );
+
+      // Watch for step changes (Next/Back) or HubSpot re-renders
+      var obs = new MutationObserver(function () {
+        // re-detect steps and questions, then update
+        stepContainers = getStepContainers();
+        stepQuestions = stepContainers.map(function (stepEl) {
+          return getQuestionsInStep(stepEl);
+        });
+        updateProgress();
+      });
+
+      obs.observe(formEl, {
         childList: true,
         subtree: true,
       });
+
+      // Initial run
+      updateProgress();
     }
 
     // Create the HubSpot form and hook into onFormReady
@@ -315,7 +343,7 @@
       target: "#rf-form-root",
       onFormReady: function ($form) {
         var formEl = normalizeFormElement($form);
-        setupNextBlocking(formEl);
+        setupSectionProgress(formEl);
       },
     });
   </script>
