@@ -274,9 +274,7 @@
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
       } catch (e) {}
-    }
-
-    function loadProgress() {
+     function loadProgress() {
       var raw = null;
       try {
         raw = localStorage.getItem(STORAGE_KEY);
@@ -284,30 +282,53 @@
         return;
       }
       if (!raw) return;
-
+    
       var data = {};
       try {
         data = JSON.parse(raw);
       } catch (e) {
         return;
       }
-
+    
       var inputs = getAllQuestionInputs();
       inputs.forEach(function (input) {
         var name = input.name || input.id;
         if (!name || data[name] == null) return;
-
+    
         var saved = data[name];
         var type = (input.type || "").toLowerCase();
-
+    
         if (type === "checkbox") {
           var arr = Array.isArray(saved) ? saved : [saved];
           var val = input.value || "__on__";
-          input.checked = arr.indexOf(val) !== -1;
+          var shouldCheck = arr.indexOf(val) !== -1;
+          if (input.checked !== shouldCheck) {
+            input.checked = shouldCheck;
+            input.dispatchEvent(
+              new Event("change", { bubbles: true, cancelable: true })
+            );
+          }
         } else if (type === "radio") {
-          input.checked = saved === (input.value || "");
+          var shouldBeChecked = saved === (input.value || "");
+          if (input.checked !== shouldBeChecked) {
+            input.checked = shouldBeChecked;
+            if (shouldBeChecked) {
+              input.dispatchEvent(
+                new Event("change", { bubbles: true, cancelable: true })
+              );
+            }
+          }
         } else {
-          input.value = saved;
+          if ((input.value || "") !== (saved || "")) {
+            input.value = saved || "";
+            // Tell HubSpot/React “this field changed”
+            input.dispatchEvent(
+              new Event("input", { bubbles: true, cancelable: true })
+            );
+            input.dispatchEvent(
+              new Event("change", { bubbles: true, cancelable: true })
+            );
+          }
         }
       });
     }
