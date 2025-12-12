@@ -88,7 +88,7 @@
     /* Section breakdown panel */
     .rf-section-wrapper {
       margin-top: 24px;
-      padding-top: 20px;
+      padding-bottom: 20px;
       font-size: 0.9rem;
       border-bottom: 3px solid transparent;
       border-image: linear-gradient(90deg,#340299, #f1ebff) 1;
@@ -193,16 +193,12 @@
         <!-- section rows injected via JS -->
       </div>
     </div>
+    <p>
+      
+    </p>
 
     <!-- HubSpot form will be injected into this container by the developer script -->
     <div id="rf-form-root">
-      <!-- Your HubSpot developer embed code -->
-      <p>
-
-      </p>
-      <p>
-        
-      </p>
       <script src="https://js-na2.hsforms.net/forms/embed/developer/242714090.js" defer></script>
       <div
         id="rf-hs-form-container"
@@ -213,391 +209,292 @@
       ></div>
     </div>
   </div>
+
   <script>
-  // Group questions by nearest <h2> above them
-  function setupFormProgressWithSections(formEl) {
-    if (!formEl) return;
+    // Group questions by nearest <h2> above them
+    function setupFormProgressWithSections(formEl) {
+      if (!formEl) return;
 
-    var progressMain = document.getElementById("rf-progress-main");
-    var progressPill = document.getElementById("rf-progress-pill");
-    var progressFill = document.getElementById("rf-progress-fill");
-    var sectionList = document.getElementById("rf-section-list");
-    var sectionToggle = document.getElementById("rf-section-toggle");
+      var progressMain = document.getElementById("rf-progress-main");
+      var progressPill = document.getElementById("rf-progress-pill");
+      var progressFill = document.getElementById("rf-progress-fill");
+      var sectionList = document.getElementById("rf-section-list");
+      var sectionToggle = document.getElementById("rf-section-toggle");
 
-    // ---------------------------
-    // LOCAL STORAGE SAVE/RESTORE
-    // ---------------------------
-    var STORAGE_KEY = "rf_growth_assessment_progress_v1";
+      // ---------------------------
+      // SECTION TOGGLE BEHAVIOR
+      // ---------------------------
+      (function initToggle() {
+        if (!sectionList || !sectionToggle) return;
 
-    function getAllQuestionInputs() {
-      return Array.from(
-        formEl.querySelectorAll("input, select, textarea")
-      ).filter(function (input) {
-        var type = (input.type || "").toLowerCase();
-        if (
-          type === "hidden" ||
-          type === "submit" ||
-          type === "button" ||
-          input.disabled
-        ) {
-          return false;
-        }
-        var style = window.getComputedStyle(input);
-        return style.display !== "none" && style.visibility !== "hidden";
-      });
-    }
+        var STORAGE_KEY_TOGGLE = "rf_section_breakdown_hidden";
 
-    function saveProgress() {
-      var inputs = getAllQuestionInputs();
-      var draft = {};
-
-      inputs.forEach(function (input) {
-        var name = input.name || input.id;
-        if (!name) return;
-
-        var type = (input.type || "").toLowerCase();
-
-        if (type === "checkbox") {
-          if (!draft[name]) draft[name] = [];
-          if (input.checked) {
-            draft[name].push(input.value || "__on__");
-          }
-        } else if (type === "radio") {
-          if (input.checked) {
-            draft[name] = input.value || "";
-          }
-        } else {
-          draft[name] = input.value || "";
-        }
-      });
-
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-      } catch (e) {}
-     function loadProgress() {
-      var raw = null;
-      try {
-        raw = localStorage.getItem(STORAGE_KEY);
-      } catch (e) {
-        return;
-      }
-      if (!raw) return;
-    
-      var data = {};
-      try {
-        data = JSON.parse(raw);
-      } catch (e) {
-        return;
-      }
-    
-      var inputs = getAllQuestionInputs();
-      inputs.forEach(function (input) {
-        var name = input.name || input.id;
-        if (!name || data[name] == null) return;
-    
-        var saved = data[name];
-        var type = (input.type || "").toLowerCase();
-    
-        if (type === "checkbox") {
-          var arr = Array.isArray(saved) ? saved : [saved];
-          var val = input.value || "__on__";
-          var shouldCheck = arr.indexOf(val) !== -1;
-          if (input.checked !== shouldCheck) {
-            input.checked = shouldCheck;
-            input.dispatchEvent(
-              new Event("change", { bubbles: true, cancelable: true })
-            );
-          }
-        } else if (type === "radio") {
-          var shouldBeChecked = saved === (input.value || "");
-          if (input.checked !== shouldBeChecked) {
-            input.checked = shouldBeChecked;
-            if (shouldBeChecked) {
-              input.dispatchEvent(
-                new Event("change", { bubbles: true, cancelable: true })
-              );
-            }
-          }
-        } else {
-          if ((input.value || "") !== (saved || "")) {
-            input.value = saved || "";
-            // Tell HubSpot/React “this field changed”
-            input.dispatchEvent(
-              new Event("input", { bubbles: true, cancelable: true })
-            );
-            input.dispatchEvent(
-              new Event("change", { bubbles: true, cancelable: true })
-            );
+        function applyState(hidden) {
+          if (hidden) {
+            sectionList.classList.add("rf-section-list--hidden");
+            sectionToggle.textContent = "Show section breakdown";
+            sectionToggle.setAttribute("aria-expanded", "false");
+          } else {
+            sectionList.classList.remove("rf-section-list--hidden");
+            sectionToggle.textContent = "Hide section breakdown";
+            sectionToggle.setAttribute("aria-expanded", "true");
           }
         }
-      });
-    }
 
-    // Clear saved draft on submit
-    formEl.addEventListener("submit", function () {
-      try {
-        localStorage.removeItem(STORAGE_KEY);
-      } catch (e) {}
-    });
-
-    // ---------------------------
-    // SECTION TOGGLE BEHAVIOR
-    // ---------------------------
-    (function initToggle() {
-      if (!sectionList || !sectionToggle) return;
-
-      var STORAGE_KEY_TOGGLE = "rf_section_breakdown_hidden";
-
-      function applyState(hidden) {
-        if (hidden) {
-          sectionList.classList.add("rf-section-list--hidden");
-          sectionToggle.textContent = "Show section breakdown";
-          sectionToggle.setAttribute("aria-expanded", "false");
-        } else {
-          sectionList.classList.remove("rf-section-list--hidden");
-          sectionToggle.textContent = "Hide section breakdown";
-          sectionToggle.setAttribute("aria-expanded", "true");
-        }
-      }
-
-      var saved = null;
-      try {
-        saved = localStorage.getItem(STORAGE_KEY_TOGGLE);
-      } catch (e) {}
-      var initiallyHidden = saved === "1";
-      applyState(initiallyHidden);
-
-      sectionToggle.addEventListener("click", function () {
-        var isHidden = sectionList.classList.contains("rf-section-list--hidden");
-        var newHidden = !isHidden;
-        applyState(newHidden);
+        var saved = null;
         try {
-          localStorage.setItem(STORAGE_KEY_TOGGLE, newHidden ? "1" : "0");
+          saved = localStorage.getItem(STORAGE_KEY_TOGGLE);
         } catch (e) {}
-      });
-    })();
+        var initiallyHidden = saved === "1";
+        applyState(initiallyHidden);
 
-    // ---------------------------
-    // PROGRESS + SECTION LOGIC
-    // ---------------------------
+        sectionToggle.addEventListener("click", function () {
+          var isHidden = sectionList.classList.contains("rf-section-list--hidden");
+          var newHidden = !isHidden;
+          applyState(newHidden);
+          try {
+            localStorage.setItem(STORAGE_KEY_TOGGLE, newHidden ? "1" : "0");
+          } catch (e) {}
+        });
+      })();
 
-    function getSectionHeadings() {
-      return Array.from(formEl.querySelectorAll("h2")).filter(function (h) {
-        var txt = (h.innerText || "").trim();
-        if (!txt) return false;
-        var style = window.getComputedStyle(h);
-        return style.display !== "none" && style.visibility !== "hidden";
-      });
-    }
+      // ---------------------------
+      // PROGRESS + SECTION LOGIC
+      // ---------------------------
 
-    function findNearestH2Above(el, h2s) {
-      var current = el;
-      while (current && current !== formEl) {
-        var sibling = current.previousElementSibling;
-        while (sibling) {
-          if (h2s.indexOf(sibling) !== -1) return sibling;
-          var nested = sibling.querySelector("h2");
-          if (nested && h2s.indexOf(nested) !== -1) return nested;
-          sibling = sibling.previousElementSibling;
-        }
-        current = current.parentElement;
-      }
-      return null;
-    }
-
-    function buildQuestionGroupsBySection() {
-      var inputs = getAllQuestionInputs();
-      var h2s = getSectionHeadings();
-      var byName = {};
-
-      inputs.forEach(function (input) {
-        var name = input.name || input.id;
-        if (!name) return;
-        if (!byName[name]) {
-          byName[name] = {
-            name: name,
-            inputs: [],
-            sectionTitle: null
-          };
-        }
-        byName[name].inputs.push(input);
-      });
-
-      var groups = Object.values(byName);
-
-      groups.forEach(function (group) {
-        var refInput = group.inputs[0];
-        var heading = findNearestH2Above(refInput, h2s);
-        group.sectionTitle = heading
-          ? (heading.innerText || "").trim()
-          : "Other";
-      });
-
-      return groups;
-    }
-
-    function isGroupAnswered(group) {
-      var inputs = group.inputs;
-      if (!inputs || !inputs.length) return false;
-
-      var hasChoice = inputs.some(function (input) {
-        var type = (input.type || "").toLowerCase();
-        return type === "checkbox" || type === "radio";
-      });
-
-      if (hasChoice) {
-        return inputs.some(function (input) {
-          return input.checked;
+      function getAllQuestionInputs() {
+        return Array.from(
+          formEl.querySelectorAll("input, select, textarea")
+        ).filter(function (input) {
+          var type = (input.type || "").toLowerCase();
+          if (
+            type === "hidden" ||
+            type === "submit" ||
+            type === "button" ||
+            input.disabled
+          ) {
+            return false;
+          }
+          var style = window.getComputedStyle(input);
+          return style.display !== "none" && style.visibility !== "hidden";
         });
       }
 
-      return inputs.some(function (input) {
-        var val = input.value;
-        return val != null && val.toString().trim() !== "";
-      });
-    }
-
-    function updateProgress() {
-      var groups = buildQuestionGroupsBySection();
-      var totalQuestions = groups.length;
-      var answeredQuestions = groups.filter(isGroupAnswered).length;
-
-      if (totalQuestions === 0) {
-        progressMain.textContent =
-          "Progress will appear once the questions finish loading.";
-        progressPill.textContent = "No questions detected yet";
-        progressPill.classList.remove("rf-pill--complete");
-        if (progressFill) progressFill.style.width = "0%";
-        if (sectionList) sectionList.innerHTML = "";
-        return;
-      }
-
-      // Overall counts
-      progressMain.textContent =
-        "Answered " + answeredQuestions + " / " + totalQuestions + " questions";
-
-      var ratio = answeredQuestions / totalQuestions;
-      var percent = Math.round(ratio * 100);
-
-      if (answeredQuestions === totalQuestions) {
-        progressPill.textContent = "All questions completed";
-        progressPill.classList.add("rf-pill--complete");
-      } else {
-        progressPill.textContent = percent + "% of questions answered";
-        progressPill.classList.remove("rf-pill--complete");
-      }
-
-      if (progressFill) {
-        progressFill.style.width = percent + "%";
-      }
-
-      // Per-section breakdown
-      if (sectionList) {
-        var bySection = {};
-        groups.forEach(function (g) {
-          var title = g.sectionTitle || "Other";
-          if (!bySection[title]) {
-            bySection[title] = { title: title, total: 0, answered: 0 };
-          }
-          bySection[title].total += 1;
-          if (isGroupAnswered(g)) {
-            bySection[title].answered += 1;
-          }
+      function getSectionHeadings() {
+        return Array.from(formEl.querySelectorAll("h2")).filter(function (h) {
+          var txt = (h.innerText || "").trim();
+          if (!txt) return false;
+          var style = window.getComputedStyle(h);
+          return style.display !== "none" && style.visibility !== "hidden";
         });
+      }
 
-        var sections = Object.values(bySection);
+      function findNearestH2Above(el, h2s) {
+        var current = el;
+        while (current && current !== formEl) {
+          var sibling = current.previousElementSibling;
+          while (sibling) {
+            if (h2s.indexOf(sibling) !== -1) return sibling;
+            var nested = sibling.querySelector("h2");
+            if (nested && h2s.indexOf(nested) !== -1) return nested;
+            sibling = sibling.previousElementSibling;
+          }
+          current = current.parentElement;
+        }
+        return null;
+      }
+
+      function buildQuestionGroupsBySection() {
+        var inputs = getAllQuestionInputs();
         var h2s = getSectionHeadings();
+        var byName = {};
 
-        sections.sort(function (a, b) {
-          var idxA = h2s.findIndex(function (h) {
-            return (h.innerText || "").trim() === a.title;
-          });
-          var idxB = h2s.findIndex(function (h) {
-            return (h.innerText || "").trim() === b.title;
-          });
-          return idxA - idxB;
+        inputs.forEach(function (input) {
+          var name = input.name || input.id;
+          if (!name) return;
+          if (!byName[name]) {
+            byName[name] = {
+              name: name,
+              inputs: [],
+              sectionTitle: null
+            };
+          }
+          byName[name].inputs.push(input);
         });
 
-        var html = "";
-        sections.forEach(function (s) {
-          var complete = s.answered === s.total && s.total > 0;
-          html +=
-            '<div class="rf-section-row">' +
-            '<div class="rf-section-name">' +
-            s.title +
-            "</div>" +
-            '<div class="rf-section-count' +
-            (complete ? " rf-section-complete" : "") +
-            '">';
-          html += s.answered + " / " + s.total;
-          html += "</div></div>";
+        var groups = Object.values(byName);
+
+        groups.forEach(function (group) {
+          var refInput = group.inputs[0];
+          var heading = findNearestH2Above(refInput, h2s);
+          group.sectionTitle = heading
+            ? (heading.innerText || "").trim()
+            : "Other";
         });
 
-        sectionList.innerHTML = html;
+        return groups;
       }
-    }
 
-    // Save + update progress on input/change
-    formEl.addEventListener(
-      "input",
-      function () {
-        saveProgress();
-        updateProgress();
-      },
-      true
-    );
+      function isGroupAnswered(group) {
+        var inputs = group.inputs;
+        if (!inputs || !inputs.length) return false;
 
-    formEl.addEventListener(
-      "change",
-      function () {
-        saveProgress();
-        updateProgress();
-      },
-      true
-    );
+        var hasChoice = inputs.some(function (input) {
+          var type = (input.type || "").toLowerCase();
+          return type === "checkbox" || type === "radio";
+        });
 
-    // Watch for HubSpot injecting fields
-    var obs = new MutationObserver(function () {
-      updateProgress();
-    });
-
-    obs.observe(formEl, {
-      childList: true,
-      subtree: true
-    });
-
-    // Restore previous answers before first calculation
-    loadProgress();
-    updateProgress();
-  }
-
-  // Wait for HubSpot form
-  document.addEventListener("DOMContentLoaded", function () {
-    var container = document.getElementById("rf-hs-form-container");
-    if (!container) return;
-
-    function tryAttach() {
-      var form = container.querySelector("form");
-      if (form) {
-        setupFormProgressWithSections(form);
-        return true;
-      }
-      return false;
-    }
-
-    if (!tryAttach()) {
-      var observer = new MutationObserver(function () {
-        if (tryAttach()) {
-          observer.disconnect();
+        if (hasChoice) {
+          return inputs.some(function (input) {
+            return input.checked;
+          });
         }
+
+        return inputs.some(function (input) {
+          var val = input.value;
+          return val != null && val.toString().trim() !== "";
+        });
+      }
+
+      function updateProgress() {
+        var groups = buildQuestionGroupsBySection();
+        var totalQuestions = groups.length;
+        var answeredQuestions = groups.filter(isGroupAnswered).length;
+
+        if (totalQuestions === 0) {
+          progressMain.textContent =
+            "Progress will appear once the questions finish loading.";
+          progressPill.textContent = "No questions detected yet";
+          progressPill.classList.remove("rf-pill--complete");
+          if (progressFill) progressFill.style.width = "0%";
+          if (sectionList) sectionList.innerHTML = "";
+          return;
+        }
+
+        // Overall counts
+        progressMain.textContent =
+          "Answered " + answeredQuestions + " / " + totalQuestions + " questions";
+
+        var ratio = answeredQuestions / totalQuestions;
+        var percent = Math.round(ratio * 100);
+
+        if (answeredQuestions === totalQuestions) {
+          progressPill.textContent = "All questions completed";
+          progressPill.classList.add("rf-pill--complete");
+        } else {
+          progressPill.textContent = percent + "% of questions answered";
+          progressPill.classList.remove("rf-pill--complete");
+        }
+
+        if (progressFill) {
+          progressFill.style.width = percent + "%";
+        }
+
+        // Per-section breakdown
+        if (sectionList) {
+          var bySection = {};
+          groups.forEach(function (g) {
+            var title = g.sectionTitle || "Other";
+            if (!bySection[title]) {
+              bySection[title] = { title: title, total: 0, answered: 0 };
+            }
+            bySection[title].total += 1;
+            if (isGroupAnswered(g)) {
+              bySection[title].answered += 1;
+            }
+          });
+
+          var sections = Object.values(bySection);
+          var h2s = getSectionHeadings();
+
+          sections.sort(function (a, b) {
+            var idxA = h2s.findIndex(function (h) {
+              return (h.innerText || "").trim() === a.title;
+            });
+            var idxB = h2s.findIndex(function (h) {
+              return (h.innerText || "").trim() === b.title;
+            });
+            if (idxA === -1 && idxB === -1) return 0;
+            if (idxA === -1) return 1;
+            if (idxB === -1) return -1;
+            return idxA - idxB;
+          });
+
+          var html = "";
+          sections.forEach(function (s) {
+            var complete = s.answered === s.total && s.total > 0;
+            html +=
+              '<div class="rf-section-row">' +
+              '<div class="rf-section-name">' +
+              s.title +
+              "</div>" +
+              '<div class="rf-section-count' +
+              (complete ? " rf-section-complete" : "") +
+              '">';
+            html += s.answered + " / " + s.total;
+            html += "</div></div>";
+          });
+
+          sectionList.innerHTML = html;
+        }
+      }
+
+      // Update on typing / changes
+      formEl.addEventListener(
+        "input",
+        function () {
+          updateProgress();
+        },
+        true
+      );
+      formEl.addEventListener(
+        "change",
+        function () {
+          updateProgress();
+        },
+        true
+      );
+
+      // Watch for HubSpot injecting fields
+      var obs = new MutationObserver(function () {
+        updateProgress();
       });
 
-      observer.observe(container, {
+      obs.observe(formEl, {
         childList: true,
         subtree: true
       });
+
+      updateProgress();
     }
-  });
-</script>
+
+    // Wait for HubSpot's developer script to inject the form HTML
+    document.addEventListener("DOMContentLoaded", function () {
+      var container = document.getElementById("rf-hs-form-container");
+      if (!container) return;
+
+      function tryAttach() {
+        var form = container.querySelector("form");
+        if (form) {
+          setupFormProgressWithSections(form);
+          return true;
+        }
+        return false;
+      }
+
+      if (!tryAttach()) {
+        var observer = new MutationObserver(function () {
+          if (tryAttach()) {
+            observer.disconnect();
+          }
+        });
+
+        observer.observe(container, {
+          childList: true,
+          subtree: true
+        });
+      }
+    });
+  </script>
 </body>
 </html>
